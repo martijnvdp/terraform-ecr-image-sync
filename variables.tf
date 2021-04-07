@@ -16,14 +16,26 @@ variable "create_bucket" {
   default     = true
 }
 
-variable "docker_images" {
-  type = list(object({
+variable "docker_images_defaults" {
+  type = object({
     image_name   = string
     repo_prefix  = string
     include_tags = list(string)
     exclude_tags = list(string)
-  }))
+  })
+  description = "Default values for the docker images variable."
+  default = {
+    image_name   = null
+    repo_prefix  = null
+    include_tags = []
+    exclude_tags = []
+  }
+}
+
+variable "docker_images" {
+  type        = any
   description = "List of docker images to sync from Docker Hub to ECR."
+  default     = {}
 }
 
 variable "lambda_function_name" {
@@ -32,18 +44,10 @@ variable "lambda_function_name" {
   default     = "ecr-image-sync"
 }
 
-variable "schedule" {
-  type = object({
-    name        = string
-    expression  = string
-    description = string
-  })
+variable "schedule_expression" {
+  type        = string
   description = "Cloudwatch schedule event for the image synchronization in cron notation (UTC)."
-  default = {
-    name        = "ecr-schedule-public-images-sync"
-    expression  = "cron(0 6 * * ? *)"
-    description = "Synchronization cloudwatch schedule of the public docker images."
-  }
+  default     = "cron(0 6 * * ? *)"
 }
 
 variable "s3_bucket" {

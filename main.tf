@@ -1,3 +1,18 @@
+locals {
+  bucket_arn  = var.create_bucket ? module.lambda_bucket[0].arn : data.aws_s3_bucket.existing[0].arn
+  bucket_name = var.create_bucket ? module.lambda_bucket[0].name : data.aws_s3_bucket.existing[0].id
+  images = flatten([
+    for k, v in var.docker_images : [{
+      image_name   = k
+      repo_prefix  = try(v.repo_prefix, var.docker_images_defaults.repo_prefix)
+      include_tags = try(v.include_tags, var.docker_images_defaults.include_tags)
+      exclude_tags = try(v.exclude_tags, var.docker_images_defaults.exclude_tags)
+      }
+    ]
+  ])
+  lambda_zip = "${path.module}/${[for f in fileset(path.module, "dist/*.zip") : f][0]}"
+}
+
 data "aws_caller_identity" "current" {}
 
 data "aws_region" "current" {}
@@ -11,60 +26,54 @@ data "aws_s3_bucket" "existing" {
   bucket = var.s3_bucket
 }
 
-locals {
-  bucket_name = var.create_bucket ? module.lambda_bucket[0].name : data.aws_s3_bucket.existing[0].id
-  bucket_arn  = var.create_bucket ? module.lambda_bucket[0].arn : data.aws_s3_bucket.existing[0].arn
-}
-
 module "lambda_bucket" {
   count         = var.create_bucket ? 1 : 0
   source        = "github.com/schubergphilis/terraform-aws-mcaf-s3?ref=v0.1.10"
-  name          = var.s3_bucket
-  tags          = var.tags
-  versioning    = true
+  name          = "${var.s3_bucket}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
   force_destroy = true
   kms_key_id    = data.aws_kms_alias.s3.target_key_arn
+  versioning    = true
+  tags          = var.tags
 }
 
 resource "aws_lambda_function" "lambda_function" {
   function_name    = var.lambda_function_name
+  filename         = local.lambda_zip
   handler          = "main"
-  runtime          = "go1.x"
   role             = aws_iam_role.lambda_assume_role.arn
-  filename         = "${path.module}/dist/main.zip"
-  source_code_hash = filebase64sha256("${path.module}/dist/main.zip")
-  timeout          = 820
+  runtime          = "go1.x"
+  source_code_hash = filebase64sha256(local.lambda_zip)
   tags             = var.tags
 
   environment {
     variables = {
-      IMAGES         = jsonencode(var.docker_images)
-      REGION         = data.aws_region.current.name
-      BUCKET_NAME    = local.bucket_name
       AWS_ACCOUNT_ID = data.aws_caller_identity.current.account_id
+      BUCKET_NAME    = local.bucket_name
+      IMAGES         = jsonencode(local.images)
+      REGION         = data.aws_region.current.name
     }
   }
 }
 
 resource "aws_cloudwatch_event_rule" "event_rule" {
-  name                = var.schedule.name
-  description         = var.schedule.description
-  schedule_expression = var.schedule.expression
+  name                = "ecr-images-sync-schedule"
+  description         = "Synchronization cloudwatch schedule of the public docker images."
+  schedule_expression = var.schedule_expression
   tags                = var.tags
 }
 
 resource "aws_cloudwatch_event_target" "event_check" {
+  arn       = aws_lambda_function.lambda_function.arn
   rule      = aws_cloudwatch_event_rule.event_rule.name
   target_id = "ecr-image-sync"
-  arn       = aws_lambda_function.lambda_function.arn
 }
 
 resource "aws_lambda_permission" "allow_cloudwatch_to_call_lambda" {
-  statement_id  = "AllowExecutionFromCloudWatch"
-  action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.lambda_function.id
+  action        = "lambda:InvokeFunction"
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.event_rule.arn
+  statement_id  = "AllowExecutionFromCloudWatch"
 }
 
 resource "aws_codebuild_project" "ecr_pull_push" {
@@ -78,15 +87,15 @@ resource "aws_codebuild_project" "ecr_pull_push" {
   }
 
   cache {
-    type  = "LOCAL"
     modes = ["LOCAL_SOURCE_CACHE"]
+    type  = "LOCAL"
   }
 
   environment {
     compute_type    = "BUILD_GENERAL1_MEDIUM"
     image           = "aws/codebuild/standard:2.0"
-    type            = "LINUX_CONTAINER"
     privileged_mode = true
+    type            = "LINUX_CONTAINER"
 
     environment_variable {
       name  = "AWS_REGION"
@@ -100,8 +109,8 @@ resource "aws_codebuild_project" "ecr_pull_push" {
   }
 
   source {
-    type      = "CODEPIPELINE"
     buildspec = file("${path.module}/buildspec.yml")
+    type      = "CODEPIPELINE"
   }
 }
 
@@ -124,16 +133,16 @@ resource "aws_codepipeline" "pl_ecr_pull_push" {
     name = "Source"
 
     action {
-      name             = "Source"
       category         = "Source"
+      name             = "Source"
+      output_artifacts = ["source"]
       owner            = "AWS"
       provider         = "S3"
       version          = "1"
-      output_artifacts = ["source"]
 
       configuration = {
-        S3Bucket             = local.bucket_name
         PollForSourceChanges = "true"
+        S3Bucket             = local.bucket_name
         S3ObjectKey          = "images.zip"
       }
     }
@@ -143,11 +152,11 @@ resource "aws_codepipeline" "pl_ecr_pull_push" {
     name = "Build"
 
     action {
-      name            = "Build"
       category        = "Build"
+      input_artifacts = ["source"]
+      name            = "Build"
       owner           = "AWS"
       provider        = "CodeBuild"
-      input_artifacts = ["source"]
       version         = "1"
 
       configuration = {
@@ -156,4 +165,3 @@ resource "aws_codepipeline" "pl_ecr_pull_push" {
     }
   }
 }
-
