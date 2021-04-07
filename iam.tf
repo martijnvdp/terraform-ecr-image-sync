@@ -1,5 +1,4 @@
 data "aws_iam_policy_document" "lambda_assume_role" {
-
   statement {
     actions = ["sts:AssumeRole"]
     effect  = "Allow"
@@ -12,39 +11,40 @@ data "aws_iam_policy_document" "lambda_assume_role" {
 }
 
 data "aws_iam_policy_document" "lambda" {
-
   statement {
-    effect = "Allow"
+    effect    = "Allow"
+    resources = ["arn:aws:logs:*:*:*", ]
+
     actions = [
       "logs:PutLogEvents",
       "logs:CreateLogGroup",
       "logs:CreateLogStream",
     ]
-    resources = ["arn:aws:logs:*:*:*", ]
   }
 
   statement {
-    effect = "Allow"
+    effect    = "Allow"
+    resources = ["${local.bucket_arn}/*", ]
+
     actions = [
       "s3:GetObject",
       "s3:PutObject",
     ]
-    resources = ["${local.bucket_arn}/*", ]
   }
 
   statement {
-    effect = "Allow"
+    effect    = "Allow"
+    resources = ["*", ]
+
     actions = [
       "ecr:DescribeRepositories",
       "ecr:ListTagsForResource",
       "ecr:ListImages"
     ]
-    resources = ["*", ]
   }
 }
 
 data "aws_iam_policy_document" "codebuild_assume_role" {
-
   statement {
     actions = ["sts:AssumeRole"]
     effect  = "Allow"
@@ -57,23 +57,25 @@ data "aws_iam_policy_document" "codebuild_assume_role" {
 }
 
 data "aws_iam_policy_document" "codebuild" {
-
   statement {
-    effect = "Allow"
+    effect    = "Allow"
+    resources = ["*", ]
+
     actions = [
       "logs:CreateLogGroup",
       "logs:CreateLogStream",
       "logs:PutLogEvents"
     ]
-    resources = ["*", ]
   }
 
   statement {
     effect = "Allow"
+
     actions = [
       "s3:GetObject",
       "s3:PutObject"
     ]
+
     resources = [
       local.bucket_arn,
       "${local.bucket_arn}/*",
@@ -81,14 +83,13 @@ data "aws_iam_policy_document" "codebuild" {
   }
 
   statement {
-    effect    = "Allow"
     actions   = ["ecr:*"]
+    effect    = "Allow"
     resources = ["*", ]
   }
 }
 
 data "aws_iam_policy_document" "codepipeline_assume_role" {
-
   statement {
     actions = ["sts:AssumeRole"]
     effect  = "Allow"
@@ -101,15 +102,16 @@ data "aws_iam_policy_document" "codepipeline_assume_role" {
 }
 
 data "aws_iam_policy_document" "codepipeline" {
-
   statement {
     effect = "Allow"
+
     actions = [
       "s3:GetObject",
       "s3:GetObjectVersion",
       "s3:GetBucketVersioning",
       "s3:PutObject"
     ]
+
     resources = [
       local.bucket_arn,
       "${local.bucket_arn}/*"
@@ -117,12 +119,13 @@ data "aws_iam_policy_document" "codepipeline" {
   }
 
   statement {
-    effect = "Allow"
+    effect    = "Allow"
+    resources = ["*", ]
+
     actions = [
       "codebuild:BatchGetBuilds",
       "codebuild:StartBuild"
     ]
-    resources = ["*", ]
   }
 }
 
@@ -155,4 +158,3 @@ resource "aws_iam_role_policy" "codepipeline_role" {
   role   = aws_iam_role.codepipeline_assume_role.name
   policy = data.aws_iam_policy_document.codepipeline.json
 }
-
