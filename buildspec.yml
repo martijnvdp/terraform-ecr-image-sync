@@ -1,5 +1,6 @@
 version: 0.2
-
+env:
+  ${secret_options}
 phases:
   install:
     runtime-versions:
@@ -10,14 +11,18 @@ phases:
       - 'unzip -q awscliv2.zip'
       - './aws/install'
       - 'aws --version'
+      - 'if ! ( which jq ) ;then apt-get update -y; true; apt-get install -y jq; fi'
   build:
     commands: |
        set -e
        while IFS=, read -r dockerImage ecrImage tag
        do
+       if [ ! -v $${DOCKER_HUB_PASSWORD} ]; then docker login -u $${DOCKER_HUB_USERNAME} -p $${DOCKER_HUB_PASSWORD}; fi
+       if [ ! -v $${DOCKER_HUB_PASSWORD} ] && [ "$${LOGGING}" == "debug" ]; then TOKEN=$(curl --user $${DOCKER_HUB_USERNAME}:$${DOCKER_HUB_PASSWORD} "https://auth.docker.io/token?service=registry.docker.io&scope=repository:ratelimitpreview/test:pull" | jq -r .token);fi
        echo "$dockerImage:$tag"
        docker pull $dockerImage:$tag
        docker tag $dockerImage:$tag $ecrImage:$tag
-       aws ecr get-login-password | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+       aws ecr get-login-password | docker login --username AWS --password-stdin $${AWS_ACCOUNT_ID}.dkr.ecr.$${AWS_REGION}.amazonaws.com
        docker push $ecrImage:$tag
+       if [ ! -v $TOKEN ] && [ "$${LOGGING}" == "debug" ] ;then curl --head -H "Authorization: Bearer $TOKEN" https://registry-1.docker.io/v2/ratelimitpreview/test/manifests/latest 2>&1 | grep RateLimit; fi
        done < images.csv

@@ -87,6 +87,32 @@ data "aws_iam_policy_document" "codebuild" {
     effect    = "Allow"
     resources = ["*", ]
   }
+
+  dynamic "statement" {
+    for_each = var.dockerhub_credentials_sm != null ? [var.dockerhub_credentials_sm] : []
+    content {
+      actions = [
+        "secretsmanager:GetResourcePolicy",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:ListSecretVersionIds"
+      ]
+      effect    = "Allow"
+      resources = ["arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:${statement.value}*"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.dockerhub_credentials_ssm.password_item != null ? [var.dockerhub_credentials_ssm] : []
+    content {
+      actions = ["ssm:GetParameters"]
+      effect  = "Allow"
+      resources = [
+        "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter${statement.value.password_item}",
+        "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter${statement.value.username_item}"
+      ]
+    }
+  }
 }
 
 data "aws_iam_policy_document" "codepipeline_assume_role" {
@@ -158,3 +184,4 @@ resource "aws_iam_role_policy" "codepipeline_role" {
   role   = aws_iam_role.codepipeline_assume_role.name
   policy = data.aws_iam_policy_document.codepipeline.json
 }
+

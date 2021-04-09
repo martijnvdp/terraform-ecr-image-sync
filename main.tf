@@ -51,6 +51,7 @@ resource "aws_lambda_function" "lambda_function" {
       BUCKET_NAME    = local.bucket_name
       IMAGES         = jsonencode(local.images)
       REGION         = data.aws_region.current.name
+      REPO_PREFIX    = var.default_repo_prefix
     }
   }
 }
@@ -92,7 +93,7 @@ resource "aws_codebuild_project" "ecr_pull_push" {
   }
 
   environment {
-    compute_type    = "BUILD_GENERAL1_MEDIUM"
+    compute_type    = "BUILD_GENERAL1_SMALL"
     image           = "aws/codebuild/standard:2.0"
     privileged_mode = true
     type            = "LINUX_CONTAINER"
@@ -106,11 +107,25 @@ resource "aws_codebuild_project" "ecr_pull_push" {
       name  = "AWS_ACCOUNT_ID"
       value = data.aws_caller_identity.current.account_id
     }
+
+    dynamic "environment_variable" {
+      for_each = var.debug ? [var.debug] : []
+      content {
+        name  = "LOGGING"
+        value = "debug"
+      }
+    }
   }
 
   source {
-    buildspec = file("${path.module}/buildspec.yml")
-    type      = "CODEPIPELINE"
+    buildspec = var.dockerhub_credentials_sm != null ? templatefile("${path.module}/buildspec.yml", {
+      secret_options = "shell: bash\n  secrets-manager:\n    DOCKER_HUB_USERNAME: ${var.dockerhub_credentials_sm}:username\n    DOCKER_HUB_PASSWORD: ${var.dockerhub_credentials_sm}:password"
+      }) : var.dockerhub_credentials_ssm.username_item != null ? templatefile("${path.module}/buildspec.yml", {
+      secret_options = "shell: bash\n  parameter-store:\n    DOCKER_HUB_USERNAME: ${var.dockerhub_credentials_ssm.username_item}\n    DOCKER_HUB_PASSWORD: ${var.dockerhub_credentials_ssm.password_item}"
+      }) : templatefile("${path.module}/buildspec.yml", {
+      secret_options = "shell: bash"
+    })
+    type = "CODEPIPELINE"
   }
 }
 
@@ -165,3 +180,4 @@ resource "aws_codepipeline" "pl_ecr_pull_push" {
     }
   }
 }
+

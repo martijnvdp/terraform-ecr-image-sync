@@ -16,6 +16,36 @@ variable "create_bucket" {
   default     = true
 }
 
+variable "debug" {
+  type        = bool
+  description = "Debug logging."
+  default     = false
+}
+
+variable "default_repo_prefix" {
+  type        = string
+  description = "Default repo prefix value for all images."
+  default     = null
+}
+
+variable "dockerhub_credentials_sm" {
+  type        = string
+  description = "AWS secretsmanager item name containing dockerhub credentials (keys:username and password)."
+  default     = null
+}
+
+variable "dockerhub_credentials_ssm" {
+  type = object({
+    username_item = string
+    password_item = string
+  })
+  description = "AWS SSM parameter store items containing dockerhub credentials."
+  default = {
+    username_item = null
+    password_item = null
+  }
+}
+
 variable "docker_images_defaults" {
   type = object({
     image_name   = string
@@ -35,7 +65,6 @@ variable "docker_images_defaults" {
 variable "docker_images" {
   type        = any
   description = "List of docker images to sync from Docker Hub to ECR."
-  default     = {}
 }
 
 variable "lambda_function_name" {
@@ -59,4 +88,5 @@ variable "s3_bucket" {
 variable "tags" {
   type        = map(string)
   description = "A mapping of tags assigned to the resources."
+  default     = null
 }
