@@ -1,5 +1,10 @@
 # Usage
-<!--- BEGIN_TF_DOCS --->
+code pipeline icw lambda to sync ecr images with dockerhub
+
+## Docker images lambda function
+
+- `docker pull ccvhosting/ecr-image-sync:latest`
+- `docker pull ccvhosting/ecr-image-sync:v0.0.2`
 ## Requirements
 
 No requirements.
