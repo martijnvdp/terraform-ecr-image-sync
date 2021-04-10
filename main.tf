@@ -10,7 +10,7 @@ locals {
       }
     ]
   ])
-  lambda_zip = "${path.module}/${[for f in fileset(path.module, "dist/*.zip") : f][0]}"
+  lambda_zip = try("${path.module}/${[for f in fileset(path.module, "dist/*.zip") : f][0]}", "no zip file in dist")
 }
 
 data "aws_caller_identity" "current" {}
@@ -38,11 +38,13 @@ module "lambda_bucket" {
 
 resource "aws_lambda_function" "lambda_function" {
   function_name    = var.lambda_function_name
-  filename         = local.lambda_zip
-  handler          = "main"
+  filename         = var.lambda_function_container == null ? local.lambda_zip : null
+  image_uri        = var.lambda_function_container != null ? "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/${var.lambda_function_container}" : null
+  package_type     = var.lambda_function_container != null ? "Image" : "Zip"
+  handler          = var.lambda_function_container == null ? "main" : null
   role             = aws_iam_role.lambda_assume_role.arn
-  runtime          = "go1.x"
-  source_code_hash = filebase64sha256(local.lambda_zip)
+  runtime          = var.lambda_function_container == null ? "go1.x" : null
+  source_code_hash = var.lambda_function_container == null ? filebase64sha256(local.lambda_zip) : null
   tags             = var.tags
 
   environment {
@@ -180,4 +182,3 @@ resource "aws_codepipeline" "pl_ecr_pull_push" {
     }
   }
 }
-

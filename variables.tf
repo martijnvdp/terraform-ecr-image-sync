@@ -67,6 +67,12 @@ variable "docker_images" {
   description = "List of docker images to sync from Docker Hub to ECR."
 }
 
+variable "lambda_function_container" {
+  type        = string
+  description = "Ecr url of the docker container for the lambda function."
+  default     = null
+}
+
 variable "lambda_function_name" {
   type        = string
   description = "Name of the lambda function."
