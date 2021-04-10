@@ -4,6 +4,10 @@
 
 No requirements.
 
+## Lambda function container
+
+- `docker pull ccvhosting/ecr-image-sync:v0.0.2`
+
 ## Providers
 
 | Name | Version |
