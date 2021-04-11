@@ -1,6 +1,6 @@
 locals {
-  bucket_arn  = var.create_bucket ? module.lambda_bucket[0].arn : data.aws_s3_bucket.existing[0].arn
-  bucket_name = var.create_bucket ? module.lambda_bucket[0].name : data.aws_s3_bucket.existing[0].id
+  bucket_arn  = var.create_bucket ? aws_s3_bucket.lambda_bucket[0].arn : data.aws_s3_bucket.existing[0].arn
+  bucket_name = var.create_bucket ? aws_s3_bucket.lambda_bucket[0].id : data.aws_s3_bucket.existing[0].id
   images = flatten([
     for k, v in var.docker_images : [{
       image_name   = k
@@ -10,7 +10,7 @@ locals {
       }
     ]
   ])
-  lambda_zip = try("${path.module}/${[for f in fileset(path.module, "dist/*.zip") : f][0]}", "no zip file in dist")
+  lambda_zip = try("${path.module}/${[for f in fileset(path.module, "${var.lambda_function_zipfile_folder}/*.zip") : f][0]}", "no zip file in dist")
 }
 
 data "aws_caller_identity" "current" {}
@@ -26,25 +26,37 @@ data "aws_s3_bucket" "existing" {
   bucket = var.s3_bucket
 }
 
-module "lambda_bucket" {
+resource "aws_s3_bucket" "lambda_bucket" {
   count         = var.create_bucket ? 1 : 0
-  source        = "github.com/schubergphilis/terraform-aws-mcaf-s3?ref=v0.1.10"
-  name          = "${var.s3_bucket}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
+  acl           = "private"
+  bucket        = "${var.s3_bucket}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
   force_destroy = true
-  kms_key_id    = data.aws_kms_alias.s3.target_key_arn
-  versioning    = true
   tags          = var.tags
+
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        kms_master_key_id = data.aws_kms_alias.s3.target_key_arn
+        sse_algorithm     = "aws:kms"
+      }
+    }
+  }
+
+  versioning {
+    enabled = true
+  }
+
 }
 
 resource "aws_lambda_function" "lambda_function" {
   function_name    = var.lambda_function_name
-  filename         = var.lambda_function_container == null ? local.lambda_zip : null
-  image_uri        = var.lambda_function_container != null ? "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/${var.lambda_function_container}" : null
-  package_type     = var.lambda_function_container != null ? "Image" : "Zip"
-  handler          = var.lambda_function_container == null ? "main" : null
+  filename         = var.lambda_function_container_uri == null ? local.lambda_zip : null
+  handler          = var.lambda_function_container_uri == null ? "main" : null
+  image_uri        = var.lambda_function_container_uri == null ? null : var.lambda_function_container_uri
+  package_type     = var.lambda_function_container_uri == null ? "Zip" : "Image"
   role             = aws_iam_role.lambda_assume_role.arn
-  runtime          = var.lambda_function_container == null ? "go1.x" : null
-  source_code_hash = var.lambda_function_container == null ? filebase64sha256(local.lambda_zip) : null
+  runtime          = var.lambda_function_container_uri == null ? "go1.x" : null
+  source_code_hash = var.lambda_function_container_uri == null ? filebase64sha256(local.lambda_zip) : null
   tags             = var.tags
 
   environment {

@@ -1,9 +1,10 @@
 module "ecr-image-sync" {
-  source                    = "../"
-  dockerhub_credentials_sm  = "aws_ssm_secret_name"                    //optional name of the aws secret item with dockerhub credentials , keys username & password
-  debug                     = true                                     //optional turn on debug logging
-  default_repo_prefix       = "/default/prefix"                        //optional default repo prefix for all images , is overridden by the individual setting
-  lambda_function_container = "aws/ecr/location/ecr-image-sync:latest" // optional if not using a container the function zip file should be in modulepath/dist
+  source                         = "../"
+  dockerhub_credentials_sm       = "aws_ssm_secret_name"                                                               // optional name of the aws secret item with dockerhub credentials , keys username & password
+  debug                          = true                                                                                // optional turn on debug logging
+  default_repo_prefix            = "/default/prefix"                                                                   // optional default repo prefix for all images , is overridden by the individual setting
+  lambda_function_container_uri  = "1111111111.dkr.ecr.eu-west-1.amazonaws.com/aws/ecr/location/ecr-image-sync:latest" // optional the function container aws ecr location 
+  lambda_function_zipfile_folder = "dist"                                                                              // optional folfer containing the function zip file
 
   dockerhub_credentials_ssm = { // optional AWS SSM parameter store item names for dockerhub username and password
     username_item = "/dockerhub/username"
