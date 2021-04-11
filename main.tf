@@ -26,6 +26,7 @@ data "aws_s3_bucket" "existing" {
   bucket = var.s3_bucket
 }
 
+#tfsec:ignore:AWS002
 resource "aws_s3_bucket" "lambda_bucket" {
   count         = var.create_bucket ? 1 : 0
   acl           = "private"
