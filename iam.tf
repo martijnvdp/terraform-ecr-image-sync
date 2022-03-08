@@ -1,7 +1,6 @@
 data "aws_iam_policy_document" "lambda_assume_role" {
   statement {
     actions = ["sts:AssumeRole"]
-    effect  = "Allow"
 
     principals {
       type        = "Service"
@@ -12,18 +11,27 @@ data "aws_iam_policy_document" "lambda_assume_role" {
 
 data "aws_iam_policy_document" "lambda" {
   statement {
-    effect    = "Allow"
-    resources = ["arn:aws:logs:*:*:*", ]
+    resources = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.lambda_function_name}*", ]
 
     actions = [
-      "logs:PutLogEvents",
       "logs:CreateLogGroup",
       "logs:CreateLogStream",
+      "logs:PutLogEvents",
     ]
   }
 
   statement {
-    effect    = "Allow"
+    resources = ["arn:aws:xray:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}*", ]
+
+    actions = [
+      "xray:PutTraceSegments",
+      "xray:PutTelemetryRecords",
+      "xray:GetSamplingRules",
+      "xray:GetSamplingTargets",
+      "xray:GetSamplingStatisticSummaries"
+    ]
+  }
+  statement {
     resources = ["${local.bucket_arn}/*", ]
 
     actions = [
@@ -33,11 +41,26 @@ data "aws_iam_policy_document" "lambda" {
   }
 
   statement {
-    effect    = "Allow"
-    resources = ["*", ]
+    resources = ["arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}*", ]
 
     actions = [
       "ecr:DescribeRepositories",
+      "ecr:ListTagsForResource",
+      "ecr:ListImages"
+    ]
+  }
+
+  statement {
+    resources = ["arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository${var.lambda_function_repo}*"]
+
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:BatchGetImage",
+      "ecr:DescribeImages",
+      "ecr:DescribeRepositories",
+      "ecr:GetLifecyclePolicy",
+      "ecr:GetRepositoryPolicy",
+      "ecr:GetDownloadUrlForLayer",
       "ecr:ListTagsForResource",
       "ecr:ListImages"
     ]
@@ -47,7 +70,6 @@ data "aws_iam_policy_document" "lambda" {
 data "aws_iam_policy_document" "codebuild_assume_role" {
   statement {
     actions = ["sts:AssumeRole"]
-    effect  = "Allow"
 
     principals {
       type        = "Service"
@@ -58,8 +80,7 @@ data "aws_iam_policy_document" "codebuild_assume_role" {
 
 data "aws_iam_policy_document" "codebuild" {
   statement {
-    effect    = "Allow"
-    resources = ["*", ]
+    resources = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.codebuild_project_name}*", ]
 
     actions = [
       "logs:CreateLogGroup",
@@ -69,7 +90,6 @@ data "aws_iam_policy_document" "codebuild" {
   }
 
   statement {
-    effect = "Allow"
 
     actions = [
       "s3:GetObject",
@@ -83,34 +103,34 @@ data "aws_iam_policy_document" "codebuild" {
   }
 
   statement {
-    actions   = ["ecr:*"]
-    effect    = "Allow"
-    resources = ["*", ]
+    resources = ["*"]
+    actions   = ["ecr:GetAuthorizationToken"]
+  }
+
+  statement {
+    resources = ["arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}*", ]
+
+    actions = [
+      "ecr:BatchGetImage",
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:CompleteLayerUpload",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:InitiateLayerUpload",
+      "ecr:PutImage",
+      "ecr:UploadLayerPart"
+    ]
   }
 
   dynamic "statement" {
-    for_each = var.dockerhub_credentials_sm != null ? [var.dockerhub_credentials_sm] : []
+    for_each = length(aws_secretsmanager_secret_version.docker_hub_credentials[*].arn) > 0 ? aws_secretsmanager_secret_version.docker_hub_credentials[*].arn : []
     content {
       actions = [
+        "secretsmanager:DescribeSecret",
         "secretsmanager:GetResourcePolicy",
         "secretsmanager:GetSecretValue",
-        "secretsmanager:DescribeSecret",
         "secretsmanager:ListSecretVersionIds"
       ]
-      effect    = "Allow"
-      resources = ["arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:${statement.value}*"]
-    }
-  }
-
-  dynamic "statement" {
-    for_each = var.dockerhub_credentials_ssm.password_item != null ? [var.dockerhub_credentials_ssm] : []
-    content {
-      actions = ["ssm:GetParameters"]
-      effect  = "Allow"
-      resources = [
-        "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter${statement.value.password_item}",
-        "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter${statement.value.username_item}"
-      ]
+      resources = ["arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:${local.docker_hub_cred_name}*"]
     }
   }
 }
@@ -118,7 +138,6 @@ data "aws_iam_policy_document" "codebuild" {
 data "aws_iam_policy_document" "codepipeline_assume_role" {
   statement {
     actions = ["sts:AssumeRole"]
-    effect  = "Allow"
 
     principals {
       type        = "Service"
@@ -129,7 +148,6 @@ data "aws_iam_policy_document" "codepipeline_assume_role" {
 
 data "aws_iam_policy_document" "codepipeline" {
   statement {
-    effect = "Allow"
 
     actions = [
       "s3:GetObject",
@@ -145,8 +163,7 @@ data "aws_iam_policy_document" "codepipeline" {
   }
 
   statement {
-    effect    = "Allow"
-    resources = ["*", ]
+    resources = [aws_codebuild_project.ecr_pull_push.arn]
 
     actions = [
       "codebuild:BatchGetBuilds",
@@ -184,4 +201,3 @@ resource "aws_iam_role_policy" "codepipeline_role" {
   role   = aws_iam_role.codepipeline_assume_role.name
   policy = data.aws_iam_policy_document.codepipeline.json
 }
-
