@@ -1,6 +1,6 @@
 
 
-Terraform module to create a lambda icw acode pipe line for syncing images \n
+Terraform module for AWS to create a lambda icw code pipe line for syncing images <br>
 between private aws/ecr and public ecrs like dockerhub/ghcr.io/quay.io
 ## Docker images lambda function
 
