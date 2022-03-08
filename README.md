@@ -1,7 +1,7 @@
 
 
-Terraform module which syncs images to ECR.
-
+Terraform module to create a lambda icw acode pipe line for syncing images \n
+between private aws/ecr and public ecrs like dockerhub/ghcr.io/quay.io
 ## Docker images lambda function
 
 - `docker pull ccvhosting/ecr-image-sync:latest`
