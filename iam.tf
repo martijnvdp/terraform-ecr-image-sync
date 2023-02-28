@@ -9,6 +9,7 @@ data "aws_iam_policy_document" "lambda_assume_role" {
   }
 }
 
+#tfsec:ignore:aws-iam-no-policy-wildcards
 data "aws_iam_policy_document" "lambda" {
   statement {
     resources = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.lambda_function_name}*", ]
@@ -31,13 +32,18 @@ data "aws_iam_policy_document" "lambda" {
       "xray:GetSamplingStatisticSummaries"
     ]
   }
-  statement {
-    resources = ["${local.bucket_arn}/*", ]
 
-    actions = [
-      "s3:GetObject",
-      "s3:PutObject",
-    ]
+  dynamic "statement" {
+    for_each = var.s3_workflow.enabled ? [1] : []
+
+    content {
+      resources = ["${local.bucket_arn}/*", ]
+
+      actions = [
+        "s3:GetObject",
+        "s3:PutObject",
+      ]
+    }
   }
 
   statement {
@@ -51,23 +57,36 @@ data "aws_iam_policy_document" "lambda" {
   }
 
   statement {
-    resources = ["arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository${var.lambda_function_repo}*"]
+    resources = ["arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}*", ]
 
     actions = [
       "ecr:BatchCheckLayerAvailability",
       "ecr:BatchGetImage",
+      "ecr:CompleteLayerUpload",
       "ecr:DescribeImages",
       "ecr:DescribeRepositories",
+      "ecr:GetDownloadUrlForLayer",
       "ecr:GetLifecyclePolicy",
       "ecr:GetRepositoryPolicy",
-      "ecr:GetDownloadUrlForLayer",
+      "ecr:InitiateLayerUpload",
+      "ecr:ListImages",
       "ecr:ListTagsForResource",
-      "ecr:ListImages"
+      "ecr:PutImage",
+      "ecr:UploadLayerPart"
     ]
+  }
+
+  statement {
+    actions = [
+      "ecr:GetAuthorizationToken"
+    ]
+    resources = ["*"]
   }
 }
 
 data "aws_iam_policy_document" "codebuild_assume_role" {
+  count = var.s3_workflow.enabled ? 1 : 0
+
   statement {
     actions = ["sts:AssumeRole"]
 
@@ -78,7 +97,10 @@ data "aws_iam_policy_document" "codebuild_assume_role" {
   }
 }
 
+#tfsec:ignore:aws-iam-no-policy-wildcards
 data "aws_iam_policy_document" "codebuild" {
+  count = var.s3_workflow.enabled ? 1 : 0
+
   statement {
     resources = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.codebuild_project_name}*", ]
 
@@ -136,6 +158,8 @@ data "aws_iam_policy_document" "codebuild" {
 }
 
 data "aws_iam_policy_document" "codepipeline_assume_role" {
+  count = var.s3_workflow.enabled ? 1 : 0
+
   statement {
     actions = ["sts:AssumeRole"]
 
@@ -146,7 +170,10 @@ data "aws_iam_policy_document" "codepipeline_assume_role" {
   }
 }
 
+#tfsec:ignore:aws-iam-no-policy-wildcards
 data "aws_iam_policy_document" "codepipeline" {
+  count = var.s3_workflow.enabled ? 1 : 0
+
   statement {
 
     actions = [
@@ -163,7 +190,7 @@ data "aws_iam_policy_document" "codepipeline" {
   }
 
   statement {
-    resources = [aws_codebuild_project.ecr_pull_push.arn]
+    resources = [aws_codebuild_project.ecr_pull_push[0].arn]
 
     actions = [
       "codebuild:BatchGetBuilds",
@@ -183,21 +210,29 @@ resource "aws_iam_role_policy" "lamda_role" {
 }
 
 resource "aws_iam_role" "codebuild_assume_role" {
+  count = var.s3_workflow.enabled ? 1 : 0
+
   name               = "ecr-sync-codebuild"
-  assume_role_policy = data.aws_iam_policy_document.codebuild_assume_role.json
+  assume_role_policy = data.aws_iam_policy_document.codebuild_assume_role[0].json
 }
 
 resource "aws_iam_role_policy" "codebuild_role" {
-  role   = aws_iam_role.codebuild_assume_role.name
-  policy = data.aws_iam_policy_document.codebuild.json
+  count = var.s3_workflow.enabled ? 1 : 0
+
+  role   = aws_iam_role.codebuild_assume_role[0].name
+  policy = data.aws_iam_policy_document.codebuild[0].json
 }
 
 resource "aws_iam_role" "codepipeline_assume_role" {
+  count = var.s3_workflow.enabled ? 1 : 0
+
   name               = "ecr-sync-codepipeline"
-  assume_role_policy = data.aws_iam_policy_document.codepipeline_assume_role.json
+  assume_role_policy = data.aws_iam_policy_document.codepipeline_assume_role[0].json
 }
 
 resource "aws_iam_role_policy" "codepipeline_role" {
-  role   = aws_iam_role.codepipeline_assume_role.name
-  policy = data.aws_iam_policy_document.codepipeline.json
+  count = var.s3_workflow.enabled ? 1 : 0
+
+  role   = aws_iam_role.codepipeline_assume_role[0].name
+  policy = data.aws_iam_policy_document.codepipeline[0].json
 }
