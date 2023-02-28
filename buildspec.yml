@@ -1,28 +1,21 @@
 version: 0.2
-env:
+env: 
   ${secret_options}
 phases:
   install:
-    runtime-versions:
-      docker: 18
     commands:
-      - 'aws --version'
-      - 'curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"'
-      - 'unzip -q awscliv2.zip'
-      - './aws/install'
-      - 'aws --version'
-      - 'if ! ( which jq ) ;then apt-get update -y; true; apt-get install -y jq; fi'
+      - wget https://github.com/google/go-containerregistry/releases/download/${crane_version}/go-containerregistry_Linux_x86_64.tar.gz -nv -O ./crane.tar.gz
+      - tar -xf crane.tar.gz
   build:
     commands: |
-       set -e
-       while IFS=, read -r dockerImage ecrImage tag
-       do
-       if [ ! -v $${DOCKER_HUB_PASSWORD} ]; then docker login -u $${DOCKER_HUB_USERNAME} -p $${DOCKER_HUB_PASSWORD}; fi
-       if [ ! -v $${DOCKER_HUB_PASSWORD} ] && [ "$${LOGGING}" == "debug" ]; then TOKEN=$(curl --user $${DOCKER_HUB_USERNAME}:$${DOCKER_HUB_PASSWORD} "https://auth.docker.io/token?service=registry.docker.io&scope=repository:ratelimitpreview/test:pull" | jq -r .token);fi
-       echo "$dockerImage:$tag"
-       docker pull $dockerImage:$tag
-       docker tag $dockerImage:$tag $ecrImage:$tag
-       aws ecr get-login-password | docker login --username AWS --password-stdin $${AWS_ACCOUNT_ID}.dkr.ecr.$${AWS_REGION}.amazonaws.com
-       docker push $ecrImage:$tag
-       if [ ! -v $TOKEN ] && [ "$${LOGGING}" == "debug" ] ;then curl --head -H "Authorization: Bearer $TOKEN" https://registry-1.docker.io/v2/ratelimitpreview/test/manifests/latest 2>&1 | grep RateLimit; fi
-       done < images.csv
+      set -e
+      while IFS=, read -r dockerImage ecrImage tag
+      do
+      if [ ! -v $${DOCKER_HUB_PASSWORD} ]; then ./crane auth login docker.io -u $${DOCKER_HUB_USERNAME} -p $${DOCKER_HUB_PASSWORD}; fi
+      if [ ! -v $${DOCKER_HUB_PASSWORD} ] && [ "$${LOGGING}" == "debug" ]; then TOKEN=$(curl --user $${DOCKER_HUB_USERNAME}:$${DOCKER_HUB_PASSWORD} "https://auth.docker.io/token?service=registry.docker.io&scope=repository:ratelimitpreview/test:pull" | jq -r .token);fi
+      PWD=$(aws ecr get-login-password) 
+      ./crane auth login -u AWS -p $${PWD} $${AWS_ACCOUNT_ID}.dkr.ecr.$${AWS_REGION}.amazonaws.com
+      echo "$dockerImage:$tag"
+      ./crane copy $dockerImage:$tag $ecrImage:$tag --platform linux/amd64
+      if [ ! -v $TOKEN ] && [ "$${LOGGING}" == "debug" ] ;then curl --head -H "Authorization: Bearer $TOKEN" https://registry-1.docker.io/v2/ratelimitpreview/test/manifests/latest 2>&1 | grep RateLimit; fi
+      done < images.csv

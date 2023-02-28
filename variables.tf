@@ -10,10 +10,10 @@ variable "codepipeline_name" {
   default     = "ecr-image-sync"
 }
 
-variable "create_bucket" {
-  type        = bool
-  description = "Whether or not to create the s3 bucket"
-  default     = true
+variable "crane_version" {
+  type        = string
+  description = "Crane version"
+  default     = "v0.11.0"
 }
 
 variable "debug" {
@@ -38,6 +38,7 @@ variable "docker_hub_credentials_sm_item_name" {
 variable "docker_images" {
   type        = any
   description = "List of docker images to sync from Docker Hub to ECR"
+  default     = null
 }
 
 variable "docker_images_defaults" {
@@ -62,11 +63,6 @@ variable "docker_images_defaults" {
   }
 }
 
-variable "environment" {
-  description = "Name of the environment"
-  type        = string
-}
-
 variable "lambda_function_container_uri" {
   type        = string
   description = "Ecr url of the docker container for the lambda function"
@@ -87,11 +83,9 @@ variable "lambda_function_repo" {
 
 variable "lambda_function_settings" {
   type = object({
-    check_digest      = bool
-    ecr_repo_prefix   = string
-    max_results       = number
-    slack_channel_id  = string
-    slack_errors_only = bool
+    check_digest    = bool
+    ecr_repo_prefix = string
+    max_results     = number
   })
   description = "Settings for the ecr-image-sync function"
   default     = null
@@ -103,23 +97,20 @@ variable "lambda_function_zip_file_folder" {
   default     = "dist"
 }
 
-variable "s3_bucket" {
-  type        = string
-  description = "S3 bucket name for the storage of the csv file with the list of images to be synced"
-  default     = "ecr-image-sync"
+variable "s3_workflow" {
+  type = object({
+    bucket        = optional(string, "ecr-image-sync")
+    create_bucket = optional(bool, true)
+    enabled       = optional(bool, true)
+  })
+  description = "S3 bucket workflow options"
+  default     = {}
 }
 
 variable "schedule_expression" {
   type        = string
   description = "Cloudwatch schedule event for the image synchronization in cron notation (UTC)"
   default     = "cron(0 6 * * ? *)"
-}
-
-variable "slack_oauth_token" {
-  type        = string
-  description = "OAuth token for the slack notifications to use for authentication"
-  default     = null
-  sensitive   = true
 }
 
 variable "tags" {

@@ -1,18 +1,28 @@
+![terraform tests](https://github.com/martijnvdp/terraform-ecr-image-sync/actions/workflows/terraform.yml/badge.svg)
 
-
-Terraform module for AWS to create a lambda icw code pipe line for syncing images <br>
+Terraform module for AWS to create a lambda for syncing images <br>
 between private aws/ecr and public ecrs like dockerhub/ghcr.io/quay.io
 ## Docker images lambda function
 
-- `docker pull ccvhosting/ecr-image-sync:latest`
-- `docker pull ccvhosting/ecr-image-sync:v0.1.7`
+- `docker pull ghcr.io/martijnvdp/ecr-image-sync:latest`
 
-## Usage example
+see the source repo https://github.com/martijnvdp/lambda-ecr-image-sync
+
+## Usage using repository tags
+
+add repository tags to configure sync options
+
+see full example
+
+## Usage example json payload
+docker_image var is optional you can also configure repository to sync using tags on repositories
+see the full example and the source repo of the lambda 
+https://github.com/martijnvdp/lambda-ecr-image-sync
+
 
 ```hcl
 module "ecr-image-sync" {
   source                        = "../"
-  environment                   = var.environment
   lambda_function_container_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/images/ccvhosting/ecr-image-sync:v0.1.7"
   slack_oauth_token             = var.slackOAuthToken
   tags                          = module.tags.tags
@@ -39,3 +49,5 @@ module "ecr-image-sync" {
 }
 
 ```
+<--BEGIN_TF_DOCS-->
+<--END_TF_DOCS-->
