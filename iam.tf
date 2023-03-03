@@ -1,10 +1,15 @@
+locals {
+  docker_images_prefixes  = var.docker_images != null ? distinct([for image, options in var.docker_images : options.repo_prefix]) : []
+  ecr_repository_prefixes = var.ecr_repository_prefixes != null ? distinct(concat(try(var.ecr_repository_prefixes, []), local.docker_images_prefixes)) : local.docker_images_prefixes
+}
+
 data "aws_iam_policy_document" "lambda_assume_role" {
   statement {
     actions = ["sts:AssumeRole"]
 
     principals {
-      type        = "Service"
       identifiers = ["lambda.amazonaws.com"]
+      type        = "Service"
     }
   }
 }
@@ -12,12 +17,12 @@ data "aws_iam_policy_document" "lambda_assume_role" {
 #tfsec:ignore:aws-iam-no-policy-wildcards
 data "aws_iam_policy_document" "lambda" {
   statement {
-    resources = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.lambda_function_name}*", ]
+    resources = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.lambda.name}*", ]
 
     actions = [
       "logs:CreateLogGroup",
       "logs:CreateLogStream",
-      "logs:PutLogEvents",
+      "logs:PutLogEvents"
     ]
   }
 
@@ -25,11 +30,11 @@ data "aws_iam_policy_document" "lambda" {
     resources = ["arn:aws:xray:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}*", ]
 
     actions = [
-      "xray:PutTraceSegments",
-      "xray:PutTelemetryRecords",
       "xray:GetSamplingRules",
+      "xray:GetSamplingStatisticSummaries",
       "xray:GetSamplingTargets",
-      "xray:GetSamplingStatisticSummaries"
+      "xray:PutTelemetryRecords",
+      "xray:PutTraceSegments"
     ]
   }
 
@@ -46,34 +51,50 @@ data "aws_iam_policy_document" "lambda" {
     }
   }
 
-  statement {
-    resources = ["arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}*", ]
+  dynamic "statement" {
+    for_each = local.ecr_repository_prefixes != null && !var.s3_workflow.enabled ? local.ecr_repository_prefixes : [""]
 
-    actions = [
-      "ecr:DescribeRepositories",
-      "ecr:ListTagsForResource",
-      "ecr:ListImages"
-    ]
+    content {
+      actions = [
+        "ecr:CompleteLayerUpload",
+        "ecr:InitiateLayerUpload",
+        "ecr:PutImage",
+        "ecr:UploadLayerPart"
+      ]
+      resources = ["arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/${statement.value}*"]
+    }
   }
 
   statement {
-    resources = ["arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}*", ]
-
     actions = [
       "ecr:BatchCheckLayerAvailability",
       "ecr:BatchGetImage",
-      "ecr:CompleteLayerUpload",
-      "ecr:DescribeImages",
       "ecr:DescribeRepositories",
       "ecr:GetDownloadUrlForLayer",
-      "ecr:GetLifecyclePolicy",
-      "ecr:GetRepositoryPolicy",
-      "ecr:InitiateLayerUpload",
       "ecr:ListImages",
-      "ecr:ListTagsForResource",
-      "ecr:PutImage",
-      "ecr:UploadLayerPart"
+      "ecr:ListTagsForResource"
     ]
+    resources = ["arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/*"]
+  }
+
+  dynamic "statement" {
+    for_each = var.lambda.container_uri != null ? [1] : []
+
+    content {
+      resources = ["arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/${replace(var.lambda.container_uri, "/^[^/]+\\/|:.*$/", "")}*"]
+
+      actions = [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
+        "ecr:DescribeImages",
+        "ecr:DescribeRepositories",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:GetLifecyclePolicy",
+        "ecr:GetRepositoryPolicy",
+        "ecr:ListImages",
+        "ecr:ListTagsForResource"
+      ]
+    }
   }
 
   statement {
@@ -91,8 +112,8 @@ data "aws_iam_policy_document" "codebuild_assume_role" {
     actions = ["sts:AssumeRole"]
 
     principals {
-      type        = "Service"
       identifiers = ["codebuild.amazonaws.com"]
+      type        = "Service"
     }
   }
 }
@@ -102,7 +123,7 @@ data "aws_iam_policy_document" "codebuild" {
   count = var.s3_workflow.enabled ? 1 : 0
 
   statement {
-    resources = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.codebuild_project_name}*", ]
+    resources = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.s3_workflow.codebuild_project_name}*", ]
 
     actions = [
       "logs:CreateLogGroup",
@@ -111,40 +132,50 @@ data "aws_iam_policy_document" "codebuild" {
     ]
   }
 
-  statement {
+  dynamic "statement" {
+    for_each = var.s3_workflow.enabled ? [1] : []
 
-    actions = [
-      "s3:GetObject",
-      "s3:PutObject"
-    ]
+    content {
+      actions = [
+        "s3:GetObject",
+        "s3:PutObject"
+      ]
 
-    resources = [
-      local.bucket_arn,
-      "${local.bucket_arn}/*",
-    ]
+      resources = [
+        local.bucket_arn,
+        "${local.bucket_arn}/*",
+      ]
+    }
   }
 
   statement {
-    resources = ["*"]
     actions   = ["ecr:GetAuthorizationToken"]
-  }
-
-  statement {
-    resources = ["arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}*", ]
-
-    actions = [
-      "ecr:BatchGetImage",
-      "ecr:BatchCheckLayerAvailability",
-      "ecr:CompleteLayerUpload",
-      "ecr:GetDownloadUrlForLayer",
-      "ecr:InitiateLayerUpload",
-      "ecr:PutImage",
-      "ecr:UploadLayerPart"
-    ]
+    resources = ["*"]
   }
 
   dynamic "statement" {
-    for_each = length(aws_secretsmanager_secret_version.docker_hub_credentials[*].arn) > 0 ? aws_secretsmanager_secret_version.docker_hub_credentials[*].arn : []
+    for_each = local.ecr_repository_prefixes != null ? local.ecr_repository_prefixes : [""]
+
+    content {
+      actions = [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
+        "ecr:CompleteLayerUpload",
+        "ecr:DescribeRepositories",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:InitiateLayerUpload",
+        "ecr:ListImages",
+        "ecr:ListTagsForResource",
+        "ecr:PutImage",
+        "ecr:UploadLayerPart"
+      ]
+      resources = ["arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/${statement.value}*"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = length(aws_secretsmanager_secret_version.docker_hub_credentials[*].arn) > 0 ? [1] : []
+
     content {
       actions = [
         "secretsmanager:DescribeSecret",
@@ -164,8 +195,8 @@ data "aws_iam_policy_document" "codepipeline_assume_role" {
     actions = ["sts:AssumeRole"]
 
     principals {
-      type        = "Service"
       identifiers = ["codepipeline.amazonaws.com"]
+      type        = "Service"
     }
   }
 }
@@ -177,9 +208,9 @@ data "aws_iam_policy_document" "codepipeline" {
   statement {
 
     actions = [
+      "s3:GetBucketVersioning",
       "s3:GetObject",
       "s3:GetObjectVersion",
-      "s3:GetBucketVersioning",
       "s3:PutObject"
     ]
 

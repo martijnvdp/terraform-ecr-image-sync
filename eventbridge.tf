@@ -1,9 +1,9 @@
 locals {
-  scheduled_event_name = "ECRImageSyncScheduledEvent"
 
   event_rules = {
     ECRImageSyncRepoCreatedRule = {
-      description   = "Capture each ECR repository created event"
+      description   = var.lambda.event_rules.repository_created.description
+      is_enabled    = var.lambda.event_rules.repository_created.is_enabled
       event_pattern = <<-EOF
       {
         "source": ["aws.ecr"],
@@ -15,12 +15,14 @@ locals {
       }
       EOF
     }
-    "${local.scheduled_event_name}" = {
-      description         = "CloudWatch schedule for synchronization of the public Docker images."
-      schedule_expression = var.schedule_expression
+    ECRImageSyncScheduledEvent = {
+      description         = var.lambda.event_rules.scheduled_event.description
+      is_enabled          = var.lambda.event_rules.scheduled_event.is_enabled
+      schedule_expression = var.lambda.event_rules.scheduled_event.schedule_expression
     }
     ECRImageSyncUpdatedInputJson = {
-      description   = "Capture all updated input JSON events: ${local.scheduled_event_name}"
+      description   = var.lambda.event_rules.payload_updated.description
+      is_enabled    = var.lambda.event_rules.payload_updated.is_enabled
       event_pattern = <<-EOF
       {
         "source": ["aws.events"],
@@ -29,14 +31,15 @@ locals {
           "eventName": ["PutTargets"],
           "eventSource": ["events.amazonaws.com"],
           "requestParameters": {
-            "rule": ["${local.scheduled_event_name}"]
+            "rule": ["ECRImageSyncScheduledEvent"]
           }
         }
       }
       EOF
     }
     ECRImageSyncChangedTagOnECRRepo = {
-      description   = "Capture each ECR repository tag changed event"
+      description   = var.lambda.event_rules.repository_tags.description
+      is_enabled    = var.lambda.event_rules.repository_tags.is_enabled
       event_pattern = <<-EOF
       {
         "source": ["aws.tag"],
@@ -61,8 +64,8 @@ locals {
         {
           "check_digest": ${local.settings.check_digest},
           "ecr_repo_prefix": "${local.settings.ecr_repo_prefix}",
-          "event_resource": <resource>,
-          "max_results": ${local.settings.max_results}
+          "max_results": ${local.settings.max_results},
+          "repository_arn": <resource>
         }
         EOF
       }
@@ -73,10 +76,11 @@ locals {
 resource "aws_cloudwatch_event_rule" "trigger" {
   for_each = local.event_rules
 
-  name                = each.key
-  event_pattern       = try(each.value.event_pattern, null)
-  schedule_expression = try(each.value.schedule_expression, null)
   description         = each.value.description
+  event_pattern       = try(each.value.event_pattern, null)
+  is_enabled          = try(each.value.is_enabled, true)
+  name                = each.key
+  schedule_expression = try(each.value.schedule_expression, null)
   tags                = var.tags
 }
 
@@ -86,7 +90,7 @@ resource "aws_cloudwatch_event_target" "trigger" {
   arn       = aws_lambda_function.ecr_image_sync.arn
   input     = try(each.value.input_transformer, {}) == {} ? jsonencode(local.settings) : null
   rule      = aws_cloudwatch_event_rule.trigger[each.key].name
-  target_id = var.lambda_function_name
+  target_id = var.lambda.name
 
   dynamic "input_transformer" {
     for_each = try(each.value.input_transformer, {}) != {} ? [1] : []
@@ -101,8 +105,8 @@ resource "aws_lambda_permission" "trigger" {
   for_each = local.event_rules
 
   action        = "lambda:InvokeFunction"
-  function_name = var.lambda_function_name
+  function_name = var.lambda.name
   principal     = "events.amazonaws.com"
-  statement_id  = "AllowExecutionFromEventBridge${each.key}"
   source_arn    = aws_cloudwatch_event_rule.trigger[each.key].arn
+  statement_id  = "AllowExecutionFromEventBridge${each.key}"
 }

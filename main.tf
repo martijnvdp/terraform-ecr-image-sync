@@ -2,16 +2,17 @@ locals {
   bucket_arn           = local.create_bucket ? module.lambda_bucket[0].arn : var.s3_workflow.enabled ? data.aws_s3_bucket.existing[0].arn : ""
   bucket_name          = local.create_bucket ? module.lambda_bucket[0].name : var.s3_workflow.enabled ? data.aws_s3_bucket.existing[0].id : ""
   create_bucket        = var.s3_workflow.create_bucket && var.s3_workflow.enabled
-  docker_hub_cred_name = var.docker_hub_credentials != null ? "${random_id.aws_sm_item[0].keepers.name}${random_id.aws_sm_item[0].id}" : null
+  create_secret        = var.docker_hub_credentials != null && var.s3_workflow.enabled
+  docker_hub_cred_name = local.create_secret ? "${random_id.aws_sm_item[0].keepers.name}${random_id.aws_sm_item[0].id}" : ""
 
   settings = {
-    check_digest    = try(var.lambda_function_settings.check_digest, false)
-    ecr_repo_prefix = try(var.lambda_function_settings.ecr_repo_prefix, "")
+    check_digest    = try(var.lambda.settings.check_digest, false)
+    ecr_repo_prefix = try(var.lambda.settings.ecr_repo_prefix, "")
     images          = var.docker_images
-    max_results     = try(var.lambda_function_settings.max_results, 0)
+    max_results     = try(var.lambda.settings.max_results, 0)
   }
 
-  lambda_zip = try("${path.module}/${[for f in fileset(path.module, "${var.lambda_function_zip_file_folder}/*.zip") : f][0]}", "no zip file in dist")
+  lambda_zip = try("${path.module}/${[for f in fileset(path.module, "${var.lambda.function_zip_file_folder}/*.zip") : f][0]}", "no zip file in dist")
 }
 
 data "aws_caller_identity" "current" {}
@@ -31,12 +32,12 @@ data "aws_s3_bucket" "existing" {
 module "lambda_bucket" {
   count = local.create_bucket ? 1 : 0
 
-  source        = "github.com/schubergphilis/terraform-aws-mcaf-s3?ref=v0.6.2"
-  name          = "${var.s3_workflow.bucket}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
   force_destroy = true
   kms_key_arn   = data.aws_kms_alias.s3.target_key_arn
-  versioning    = true
+  name          = "${var.s3_workflow.bucket}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
+  source        = "github.com/schubergphilis/terraform-aws-mcaf-s3?ref=v0.6.2"
   tags          = var.tags
+  versioning    = true
 
   lifecycle_rule = [
     {
@@ -59,16 +60,16 @@ module "lambda_bucket" {
 }
 
 resource "aws_lambda_function" "ecr_image_sync" {
-  function_name    = var.lambda_function_name
-  filename         = var.lambda_function_container_uri == null ? local.lambda_zip : null
-  handler          = var.lambda_function_container_uri == null ? "main" : null
-  image_uri        = var.lambda_function_container_uri == null ? null : var.lambda_function_container_uri
-  package_type     = var.lambda_function_container_uri == null ? "Zip" : "Image"
+  filename         = var.lambda.container_uri == null ? local.lambda_zip : null
+  function_name    = var.lambda.name
+  handler          = var.lambda.container_uri == null ? "main" : null
+  image_uri        = var.lambda.container_uri == null ? null : var.lambda.container_uri
+  package_type     = var.lambda.container_uri == null ? "Zip" : "Image"
   role             = aws_iam_role.lambda_assume_role.arn
-  runtime          = var.lambda_function_container_uri == null ? "go1.x" : null
-  source_code_hash = var.lambda_function_container_uri == null ? filebase64sha256(local.lambda_zip) : null
-  timeout          = 600
+  runtime          = var.lambda.container_uri == null ? "go1.x" : null
+  source_code_hash = var.lambda.container_uri == null ? filebase64sha256(local.lambda_zip) : null
   tags             = var.tags
+  timeout          = 600
 
   environment {
     variables = local.create_bucket ? {
@@ -76,8 +77,10 @@ resource "aws_lambda_function" "ecr_image_sync" {
       BUCKET_NAME    = local.bucket_name
       REGION         = data.aws_region.current.name
       } : {
-      AWS_ACCOUNT_ID = data.aws_caller_identity.current.account_id
-      REGION         = data.aws_region.current.name
+      AWS_ACCOUNT_ID  = data.aws_caller_identity.current.account_id
+      DOCKER_PASSWORD = var.docker_hub_credentials != null ? jsondecode(var.docker_hub_credentials).password : null
+      DOCKER_USERNAME = var.docker_hub_credentials != null ? jsondecode(var.docker_hub_credentials).username : null
+      REGION          = data.aws_region.current.name
     }
   }
 
@@ -89,8 +92,8 @@ resource "aws_lambda_function" "ecr_image_sync" {
 resource "aws_codebuild_project" "ecr_pull_push" {
   count = var.s3_workflow.enabled ? 1 : 0
 
-  name          = var.codebuild_project_name
   build_timeout = "60"
+  name          = var.s3_workflow.codebuild_project_name
   service_role  = aws_iam_role.codebuild_assume_role[0].arn
   tags          = var.tags
 
@@ -119,7 +122,7 @@ resource "aws_codebuild_project" "ecr_pull_push" {
     }
 
     dynamic "environment_variable" {
-      for_each = var.debug ? [var.debug] : []
+      for_each = var.s3_workflow.debug ? [var.s3_workflow.debug] : []
       content {
         name  = "LOGGING"
         value = "debug"
@@ -130,10 +133,10 @@ resource "aws_codebuild_project" "ecr_pull_push" {
   source {
     buildspec = length(aws_secretsmanager_secret_version.docker_hub_credentials[*].arn) > 0 ? templatefile("${path.module}/buildspec.yml", {
       secret_options = "shell: bash\n  secrets-manager:\n    DOCKER_HUB_USERNAME: ${tostring(aws_secretsmanager_secret.docker_hub_credentials[0].id)}:username\n    DOCKER_HUB_PASSWORD: ${tostring(aws_secretsmanager_secret.docker_hub_credentials[0].id)}:password"
-      crane_version  = var.crane_version
+      crane_version  = var.s3_workflow.crane_version
       }) : templatefile("${path.module}/buildspec.yml", {
       secret_options = "shell: bash"
-      crane_version  = var.crane_version
+      crane_version  = var.s3_workflow.crane_version
     })
     type = "CODEPIPELINE"
   }
@@ -142,7 +145,7 @@ resource "aws_codebuild_project" "ecr_pull_push" {
 resource "aws_codepipeline" "pl_ecr_pull_push" {
   count = var.s3_workflow.enabled ? 1 : 0
 
-  name     = var.codepipeline_name
+  name     = var.s3_workflow.codepipeline_name
   role_arn = aws_iam_role.codepipeline_assume_role[0].arn
   tags     = var.tags
 
@@ -194,7 +197,7 @@ resource "aws_codepipeline" "pl_ecr_pull_push" {
 }
 
 resource "random_id" "aws_sm_item" {
-  count = var.docker_hub_credentials != null ? 1 : 0
+  count = local.create_secret ? 1 : 0
 
   byte_length = 4
 
@@ -205,14 +208,14 @@ resource "random_id" "aws_sm_item" {
 
 // tfsec:ignore:AWS095 - TODO: CCV-1403
 resource "aws_secretsmanager_secret" "docker_hub_credentials" {
-  count = var.docker_hub_credentials != null ? 1 : 0
+  count = local.create_secret ? 1 : 0
 
   name = local.docker_hub_cred_name
 }
 
 // tfsec:ignore:GEN003
 resource "aws_secretsmanager_secret_version" "docker_hub_credentials" {
-  count = var.docker_hub_credentials != null ? 1 : 0
+  count = local.create_secret ? 1 : 0
 
   secret_id     = aws_secretsmanager_secret.docker_hub_credentials[0].id
   secret_string = var.docker_hub_credentials
