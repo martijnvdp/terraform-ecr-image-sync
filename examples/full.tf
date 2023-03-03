@@ -1,33 +1,15 @@
 locals {
 
-  ecr_lambda_repositories = ["images/lambda-ecr-image-sync"]
-  deploy_ecr_sync         = true
-
   # The equality operators are equal (-eq), greater than (-gt), greater than or equal (-ge), less than (-lt), and less than or equal (-le)
-  image_sync_images = {
-    "dev" = {
-      "quay.io/isovalent/cilium"                       = { ecr_sync_constraint = "-ge v1.10.3", ecr_sync_include_rls = "cee", ecr_sync_include_tags = "current" }
-      "docker.io/openpolicyagent/gatekeeper"           = { ecr_sync_constraint = "-ge v3.9.0" }
-      "docker.io/otel/opentelemetry-collector-contrib" = { ecr_sync_constraint = "-ge 0.66.0" }
-      "docker.io/grafana/grafana"                      = { ecr_sync_constraint = "-ge 9.3.1" }
-      "docker.io/redis"                                = { ecr_sync_constraint = "-ge 7.0.4", ecr_sync_include_rls = "alpine", ecr_sync_release_only = "true" }
-    }
-    "test" = {
-      "docker.io/nginx" = { ecr_sync_constraint = "-ge 1.21" }
-    }
+  ecr_repositories = {
+    "images/lambda-ecr-image-sync"             = {}
+    "dev/isovalent/cilium"                     = { source = "quay.io/isovalent/cilium", constraint = "-ge v1.10.3", include_rls = "cee", include_tags = "current" }
+    "dev/openpolicyagent/gatekeeper"           = { source = "docker.io/openpolicyagent/gatekeeper", constraint = "-ge v3.9.0" }
+    "dev/otel/opentelemetry-collector-contrib" = { source = "docker.io/otel/opentelemetry-collector-contrib", constraint = "-ge 0.66.0" }
+    "dev/grafana/grafana"                      = { source = "docker.io/grafana/grafana", constraint = "-ge 9.3.1" }
+    "dev/redis"                                = { source = "docker.io/redis", constraint = "-ge 7.0.4", include_rls = "alpine", release_only = "true" }
+    "test/nginx"                               = { source = "docker.io/nginx", constraint = "-ge 1.21" }
   }
-
-  image_sync_ecr_map = flatten([
-    for repo, v in local.image_sync_images : [
-      for name, options in v : {
-        repository_name = length(split("/", name)) == 3 ? "${repo}/${split("/", name)[1]}/${split("/", name)[2]}" : "${repo}/${split("/", name)[1]}"
-        tags = merge(options, {
-          ecr_sync_opt    = "in"
-          ecr_sync_source = name
-        })
-      }
-    ]
-  ])
 }
 
 data "aws_kms_key" "cmk" {
@@ -41,17 +23,13 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 module "ecr" {
-  count  = 1
   source = "github.com/martijnvdp/terraform-aws-mcaf-ecr?ref=repository-tags"
 
   image_tag_mutability       = "MUTABLE"
-  principals_readonly_access = [data.aws_caller_identity.current.account_id]
-  repository_names           = [for k, v in local.image_sync_ecr_map : v.repository_name]
   kms_key_arn                = data.aws_kms_key.cmk.arn
-
-  repository_tags = { for _, v in local.image_sync_ecr_map : v.repository_name => try(v.tags, {})
-    if try(v.tags.ecr_sync_opt, "") == "in"
-  }
+  principals_readonly_access = [data.aws_caller_identity.current.account_id]
+  repository_names           = [for k, _ in local.ecr_repositories : k]
+  repository_tags            = { for name, tags in local.ecr_repositories : name => merge({ ecr_sync_opt = "in" }, { for k, v in tags : "ecr_sync_${k}" => v }) if try(tags.source, "") != "" }
 }
 
 // ECR Image Sync Lambda function
@@ -59,49 +37,26 @@ module "ecrImageSync" {
   source = "../"
 
   // docker_hub_credentials        = var.docker_hub_credentials
+  ecr_repository_prefixes = distinct([for repo, tags in local.ecr_repositories : regex("^(\\w+)/.*$", repo)[0] if try(tags.source, "") != ""])
+
   // source container image: docker pull ghcr.io/martijnvdp/ecr-image-sync:latest
-  lambda_function_container_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/images/lambda-ecr-image-sync:v1.0.1"
-  schedule_expression           = "cron(0 7 * * ? *)"
+  lambda = {
+    container_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/base/infra/ecr-image-sync:v1.0.0"
 
-  lambda_function_settings = {
-    check_digest    = true
-    ecr_repo_prefix = ""
-    max_results     = 10
-  }
-
-  providers = {
-    aws = aws
-  }
-
-  s3_workflow = {
-    enabled = false
-  }
-}
-
-// ECR for the Lambda function container image
-module "ecrLambda" {
-  count  = length(local.ecr_lambda_repositories) > 0 && local.deploy_ecr_sync ? 1 : 0
-  source = "github.com/schubergphilis/terraform-aws-mcaf-ecr?ref=v1.1.0"
-
-  image_tag_mutability       = "MUTABLE"
-  kms_key_arn                = data.aws_kms_key.cmk.arn
-  principals_readonly_access = [data.aws_caller_identity.current.account_id]
-  repository_names           = local.ecr_lambda_repositories
-
-  additional_ecr_policy_statements = {
-    LambdaECRImageRetrievalPolicy = {
-      effect = "allow"
-      principal = {
-        type        = "service"
-        identifiers = ["lambda.amazonaws.com"]
+    event_rules = {
+      repository_tags = {
+        is_enabled = false
       }
-      actions = [
-        "ecr:BatchGetImage",
-        "ecr:DeleteRepositoryPolicy",
-        "ecr:GetDownloadUrlForLayer",
-        "ecr:GetRepositoryPolicy",
-        "ecr:SetRepositoryPolicy"
-      ]
+
+      scheduled_event = {
+        schedule_expression = "cron(0 7 * * ? *)"
+      }
+    }
+
+    settings = {
+      check_digest    = true
+      ecr_repo_prefix = ""
+      max_results     = 5
     }
   }
 }
