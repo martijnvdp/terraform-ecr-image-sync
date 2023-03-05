@@ -8,43 +8,38 @@ between private aws/ecr and public ecrs like dockerhub/ghcr.io/quay.io
 
 see the source repo https://github.com/martijnvdp/lambda-ecr-image-sync
 
-## Usage using repository tags
+## configure repositories to sync using tags
 
-add repository tags to configure sync options
-
-see full example
-
-## Usage example json payload
-docker_image var is optional you can also configure repository to sync using tags on repositories
+Configure repository to sync using tags on repositories
 see the full example and the source repo of the lambda 
 https://github.com/martijnvdp/lambda-ecr-image-sync
 
 
 ```hcl
-module "ecr-image-sync" {
-  source                        = "../"
-  lambda_function_container_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/images/ccvhosting/ecr-image-sync:v0.1.7"
-  slack_oauth_token             = var.slackOAuthToken
-  tags                          = module.tags.tags
+module "ecrImageSync" {
+  source = "../"
 
-  docker_images = {
-    "images" = { //prefix , example targetecr/infra/bitnami/external-dns
-      "docker.io/bitnami/external-dns"      = { constraint = ">= 0.7.3", include_rels = ["debian"] }
-      "docker.io/ccvhosting/ecr-image-sync" = { constraint = "~> v0.1.0", include_rels = ["rc"], type = "lambda" }
-      "ghcr.io/some/image"                  = { constraint = ">= v2.30.0" }
-      "quay.io/someother/image"             = { constraint = ">= v2.2.5" }
-    }
-    "other/images/prefix" = {
-      "docker.io/nginx" = { constraint = ">= 1.21" }
-    }
-  }
+  docker_hub_credentials  = var.docker_hub_credentials // optional
+  ecr_repository_prefixes = distinct([for repo, tags in local.ecr_repositories : regex("^(\\w+)/.*$", repo)[0] if try(tags.source, "") != ""])
 
-  lambda_function_settings = {
-    check_digest      = true // check image digest with existing images 
-    ecr_repo_prefix   = "" // optional global ecr prefix
-    max_results       = 2  // max image results 
-    slack_errors_only = true // only errors to slack
-    slack_channel_id  = "" // optional slack channel id
+  // source container image: docker pull ghcr.io/martijnvdp/ecr-image-sync:latest
+  lambda = {
+    container_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/images/ecr-image-sync:v1.0.2"
+
+    event_rules = {
+
+      scheduled_event = {
+        schedule_expression = "cron(0 7 * * ? *)"
+      }
+    }
+
+    settings = {
+      check_digest    = true
+      ecr_repo_prefix = ""
+      max_results     = 5
+      slack_errors_only = true // only errors to slack
+      slack_channel_id  = "" // optional slack channel id
+    }
   }
 }
 

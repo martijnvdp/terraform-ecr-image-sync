@@ -1,6 +1,5 @@
 locals {
-  docker_images_prefixes  = var.docker_images != null ? distinct([for image, options in var.docker_images : options.repo_prefix]) : []
-  ecr_repository_prefixes = var.ecr_repository_prefixes != null ? distinct(concat(try(var.ecr_repository_prefixes, []), local.docker_images_prefixes)) : local.docker_images_prefixes
+  ecr_repository_prefixes = var.ecr_repository_prefixes != null ? distinct(var.ecr_repository_prefixes) : null
 }
 
 data "aws_iam_policy_document" "lambda_assume_role" {

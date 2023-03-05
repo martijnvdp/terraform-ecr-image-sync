@@ -1,20 +1,6 @@
 locals {
 
   event_rules = {
-    ECRImageSyncRepoCreatedRule = {
-      description   = var.lambda.event_rules.repository_created.description
-      is_enabled    = var.lambda.event_rules.repository_created.is_enabled
-      event_pattern = <<-EOF
-      {
-        "source": ["aws.ecr"],
-        "detail-type": ["AWS API Call via CloudTrail"],
-        "detail": {
-          "eventName": ["CreateRepository"],
-          "eventSource": ["ecr.amazonaws.com"]
-        }
-      }
-      EOF
-    }
     ECRImageSyncScheduledEvent = {
       description         = var.lambda.event_rules.scheduled_event.description
       is_enabled          = var.lambda.event_rules.scheduled_event.is_enabled
@@ -58,14 +44,13 @@ locals {
       EOF
       input_transformer = {
         input_paths = {
-          resource = "$.resources[0]"
+          resources = "$.resources"
         }
         input_template = <<EOF
         {
           "check_digest": ${local.settings.check_digest},
-          "ecr_repo_prefix": "${local.settings.ecr_repo_prefix}",
           "max_results": ${local.settings.max_results},
-          "repository_arn": <resource>
+          "repositories": <resources>
         }
         EOF
       }
