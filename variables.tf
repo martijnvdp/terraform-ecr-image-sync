@@ -11,12 +11,6 @@ variable "docker_hub_credentials_sm_item_name" {
   default     = "docker-hub-ecr-image-sync"
 }
 
-variable "docker_images" {
-  type        = any
-  description = "List of docker images to sync from Docker Hub to ECR"
-  default     = null
-}
-
 variable "ecr_repository_prefixes" {
   type        = list(string)
   description = "List of ECR repository prefixes to give the lambda function access for pushing images to"
@@ -31,11 +25,7 @@ variable "lambda" {
     event_rules = optional(object({
       payload_updated = optional(object({
         description = optional(string, "Capture all updated input JSON events: ECRImageSyncScheduledEvent")
-        is_enabled  = optional(bool, true)
-      }), {}),
-      repository_created = optional(object({
-        description = optional(string, "CloudWatch event rule for ECR repository created")
-        is_enabled  = optional(bool, true)
+        is_enabled  = optional(bool, false)
       }), {}),
       repository_tags = optional(object({
         description = optional(string, "Capture each ECR repository tag changed event")
@@ -65,7 +55,7 @@ variable "s3_workflow" {
     crane_version          = optional(string, "v0.11.0")
     create_bucket          = optional(bool, true)
     debug                  = optional(bool, false)
-    enabled                = optional(bool, true)
+    enabled                = optional(bool, false)
   })
   description = "S3 bucket workflow options"
   default     = {}

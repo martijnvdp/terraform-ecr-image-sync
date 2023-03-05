@@ -36,17 +36,14 @@ module "ecr" {
 module "ecrImageSync" {
   source = "../"
 
-  // docker_hub_credentials        = var.docker_hub_credentials
+  docker_hub_credentials  = var.docker_hub_credentials // optional
   ecr_repository_prefixes = distinct([for repo, tags in local.ecr_repositories : regex("^(\\w+)/.*$", repo)[0] if try(tags.source, "") != ""])
 
   // source container image: docker pull ghcr.io/martijnvdp/ecr-image-sync:latest
   lambda = {
-    container_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/base/infra/ecr-image-sync:v1.0.0"
+    container_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/images/ecr-image-sync:v1.0.0"
 
     event_rules = {
-      repository_tags = {
-        is_enabled = false
-      }
 
       scheduled_event = {
         schedule_expression = "cron(0 7 * * ? *)"
