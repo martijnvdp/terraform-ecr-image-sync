@@ -39,7 +39,6 @@ variable "lambda" {
     }), {})
     settings = optional(object({
       check_digest    = optional(bool, true)
-      ecr_repo_prefix = optional(string, "dockerhub")
       max_results     = optional(number, 100)
     }), {})
   })

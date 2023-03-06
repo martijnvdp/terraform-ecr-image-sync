@@ -6,8 +6,8 @@ locals {
   docker_hub_cred_name = local.create_secret ? "${random_id.aws_sm_item[0].keepers.name}${random_id.aws_sm_item[0].id}" : ""
 
   settings = {
-    check_digest = try(var.lambda.settings.check_digest, false)
-    max_results  = try(var.lambda.settings.max_results, 0)
+    check_digest = var.lambda.settings.check_digest
+    max_results  = var.lambda.settings.max_results
   }
 
   lambda_zip = try("${path.module}/${[for f in fileset(path.module, "${var.lambda.function_zip_file_folder}/*.zip") : f][0]}", "no zip file in dist")
