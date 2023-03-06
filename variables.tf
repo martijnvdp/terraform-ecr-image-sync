@@ -38,8 +38,8 @@ variable "lambda" {
       }), {})
     }), {})
     settings = optional(object({
-      check_digest    = optional(bool, true)
-      max_results     = optional(number, 100)
+      check_digest = optional(bool, true)
+      max_results  = optional(number, 100)
     }), {})
   })
   description = "Lambda function options"
