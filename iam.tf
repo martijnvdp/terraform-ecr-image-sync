@@ -143,7 +143,7 @@ data "aws_iam_policy_document" "codebuild" {
 
       resources = [
         local.bucket_arn,
-        "${local.bucket_arn}/*",
+        "${local.bucket_arn}/*"
       ]
     }
   }

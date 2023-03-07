@@ -53,7 +53,7 @@ variable "s3_workflow" {
     codebuild_project_name = optional(string, "ecr-image-sync")
     codepipeline_name      = optional(string, "ecr-image-sync")
     crane_version          = optional(string, "v0.11.0")
-    create_bucket          = optional(bool, true)
+    create_bucket          = optional(bool, false)
     debug                  = optional(bool, false)
     enabled                = optional(bool, false)
   })
