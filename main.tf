@@ -1,16 +1,15 @@
 locals {
-  bucket_arn           = local.create_bucket ? module.lambda_bucket[0].arn : var.s3_workflow.enabled ? data.aws_s3_bucket.existing[0].arn : ""
   bucket_name          = local.create_bucket ? module.lambda_bucket[0].name : var.s3_workflow.enabled ? data.aws_s3_bucket.existing[0].id : ""
   create_bucket        = var.s3_workflow.create_bucket && var.s3_workflow.enabled
-  create_secret        = var.docker_hub_credentials != null && var.s3_workflow.enabled
+  create_secret        = var.docker_hub_credentials != null
   docker_hub_cred_name = local.create_secret ? "${random_id.aws_sm_item[0].keepers.name}${random_id.aws_sm_item[0].id}" : ""
 
-  settings = {
-    check_digest = var.lambda.settings.check_digest
-    max_results  = var.lambda.settings.max_results
+  sync_settings = {
+    check_digest = var.lambda_function_settings.sync_settings.check_digest
+    max_results  = var.lambda_function_settings.sync_settings.max_results
   }
 
-  lambda_zip = try("${path.module}/${[for f in fileset(path.module, "${var.lambda.function_zip_file_folder}/*.zip") : f][0]}", "no zip file in dist")
+  lambda_zip = try("${path.module}/${[for f in fileset(path.module, "${var.lambda_function_settings.function_zip_file_folder}/*.zip") : f][0]}", "no zip file in dist")
 }
 
 data "aws_caller_identity" "current" {}
@@ -58,16 +57,16 @@ module "lambda_bucket" {
 }
 
 resource "aws_lambda_function" "ecr_image_sync" {
-  filename         = var.lambda.container_uri == null ? local.lambda_zip : null
-  function_name    = var.lambda.name
-  handler          = var.lambda.container_uri == null ? "main" : null
-  image_uri        = var.lambda.container_uri == null ? null : var.lambda.container_uri
-  package_type     = var.lambda.container_uri == null ? "Zip" : "Image"
+  filename         = var.lambda_function_settings.container_uri == null ? local.lambda_zip : null
+  function_name    = var.lambda_function_settings.name
+  handler          = var.lambda_function_settings.container_uri == null ? "main" : null
+  image_uri        = var.lambda_function_settings.container_uri == null ? null : var.lambda_function_settings.container_uri
+  package_type     = var.lambda_function_settings.container_uri == null ? "Zip" : "Image"
   role             = aws_iam_role.lambda_assume_role.arn
-  runtime          = var.lambda.container_uri == null ? "go1.x" : null
-  source_code_hash = var.lambda.container_uri == null ? filebase64sha256(local.lambda_zip) : null
+  runtime          = var.lambda_function_settings.container_uri == null ? "go1.x" : null
+  source_code_hash = var.lambda_function_settings.container_uri == null ? filebase64sha256(local.lambda_zip) : null
   tags             = var.tags
-  timeout          = 600
+  timeout          = var.lambda_function_settings.timeout
 
   environment {
     variables = local.create_bucket ? {
