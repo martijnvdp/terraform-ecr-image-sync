@@ -60,7 +60,6 @@ module "ecr_lambda" {
   }
 }
 
-
 // ECR Image Sync Lambda function
 module "ecrImageSync" {
   source = "../"
