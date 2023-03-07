@@ -1,4 +1,5 @@
 locals {
+  bucket_arn              = local.create_bucket ? module.lambda_bucket[0].arn : var.s3_workflow.enabled ? data.aws_s3_bucket.existing[0].arn : ""
   ecr_repository_prefixes = var.ecr_repository_prefixes != null ? distinct(var.ecr_repository_prefixes) : null
 }
 
@@ -16,7 +17,7 @@ data "aws_iam_policy_document" "lambda_assume_role" {
 #tfsec:ignore:aws-iam-no-policy-wildcards
 data "aws_iam_policy_document" "lambda" {
   statement {
-    resources = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.lambda.name}*", ]
+    resources = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.lambda_function_settings.name}*", ]
 
     actions = [
       "logs:CreateLogGroup",
@@ -77,10 +78,10 @@ data "aws_iam_policy_document" "lambda" {
   }
 
   dynamic "statement" {
-    for_each = var.lambda.container_uri != null ? [1] : []
+    for_each = var.lambda_function_settings.container_uri != null ? [1] : []
 
     content {
-      resources = ["arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/${replace(var.lambda.container_uri, "/^[^/]+\\/|:.*$/", "")}*"]
+      resources = ["arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/${replace(var.lambda_function_settings.container_uri, "/^[^/]+\\/|:.*$/", "")}*"]
 
       actions = [
         "ecr:BatchCheckLayerAvailability",

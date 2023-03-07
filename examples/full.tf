@@ -36,12 +36,12 @@ module "ecr" {
 module "ecrImageSync" {
   source = "../"
 
-  docker_hub_credentials  = var.docker_hub_credentials // optional
+  //docker_hub_credentials  = var.docker_hub_credentials // optional
   ecr_repository_prefixes = distinct([for repo, tags in local.ecr_repositories : regex("^(\\w+)/.*$", repo)[0] if try(tags.source, "") != ""])
 
   // source container image: docker pull ghcr.io/martijnvdp/ecr-image-sync:latest
-  lambda = {
-    container_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/images/ecr-image-sync:v1.0.0"
+  lambda_function_settings = {
+    container_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/images/ecr-image-sync:v1.0.3"
 
     event_rules = {
 
@@ -50,10 +50,9 @@ module "ecrImageSync" {
       }
     }
 
-    settings = {
-      check_digest    = true
-      ecr_repo_prefix = ""
-      max_results     = 5
+    sync_settings = {
+      check_digest = true
+      max_results  = 5
     }
   }
 }

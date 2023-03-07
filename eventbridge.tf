@@ -2,13 +2,13 @@ locals {
 
   event_rules = {
     ECRImageSyncScheduledEvent = {
-      description         = var.lambda.event_rules.scheduled_event.description
-      is_enabled          = var.lambda.event_rules.scheduled_event.is_enabled
-      schedule_expression = var.lambda.event_rules.scheduled_event.schedule_expression
+      description         = var.lambda_function_settings.event_rules.scheduled_event.description
+      is_enabled          = var.lambda_function_settings.event_rules.scheduled_event.is_enabled
+      schedule_expression = var.lambda_function_settings.event_rules.scheduled_event.schedule_expression
     }
     ECRImageSyncUpdatedInputJson = {
-      description   = var.lambda.event_rules.payload_updated.description
-      is_enabled    = var.lambda.event_rules.payload_updated.is_enabled
+      description   = var.lambda_function_settings.event_rules.payload_updated.description
+      is_enabled    = var.lambda_function_settings.event_rules.payload_updated.is_enabled
       event_pattern = <<-EOF
       {
         "source": ["aws.events"],
@@ -24,8 +24,8 @@ locals {
       EOF
     }
     ECRImageSyncChangedTagOnECRRepo = {
-      description   = var.lambda.event_rules.repository_tags.description
-      is_enabled    = var.lambda.event_rules.repository_tags.is_enabled
+      description   = var.lambda_function_settings.event_rules.repository_tags.description
+      is_enabled    = var.lambda_function_settings.event_rules.repository_tags.is_enabled
       event_pattern = <<-EOF
       {
         "source": ["aws.tag"],
@@ -48,8 +48,8 @@ locals {
         }
         input_template = <<EOF
         {
-          "check_digest": ${local.settings.check_digest},
-          "max_results": ${local.settings.max_results},
+          "check_digest": ${local.sync_settings.check_digest},
+          "max_results": ${local.sync_settings.max_results},
           "repositories": <resources>
         }
         EOF
@@ -73,9 +73,9 @@ resource "aws_cloudwatch_event_target" "trigger" {
   for_each = local.event_rules
 
   arn       = aws_lambda_function.ecr_image_sync.arn
-  input     = try(each.value.input_transformer, {}) == {} ? jsonencode(local.settings) : null
+  input     = try(each.value.input_transformer, {}) == {} ? jsonencode(local.sync_settings) : null
   rule      = aws_cloudwatch_event_rule.trigger[each.key].name
-  target_id = var.lambda.name
+  target_id = var.lambda_function_settings.name
 
   dynamic "input_transformer" {
     for_each = try(each.value.input_transformer, {}) != {} ? [1] : []
@@ -90,7 +90,7 @@ resource "aws_lambda_permission" "trigger" {
   for_each = local.event_rules
 
   action        = "lambda:InvokeFunction"
-  function_name = var.lambda.name
+  function_name = var.lambda_function_settings.name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.trigger[each.key].arn
   statement_id  = "AllowExecutionFromEventBridge${each.key}"

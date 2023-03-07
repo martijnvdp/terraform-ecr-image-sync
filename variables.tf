@@ -17,10 +17,11 @@ variable "ecr_repository_prefixes" {
   default     = null
 }
 
-variable "lambda" {
+variable "lambda_function_settings" {
   type = object({
     name            = optional(string, "ecr-image-sync")
     container_uri   = optional(string, null)
+    timeout         = optional(number, 900)
     zip_file_folder = optional(string, "dist")
     event_rules = optional(object({
       payload_updated = optional(object({
@@ -37,7 +38,7 @@ variable "lambda" {
         schedule_expression = optional(string, "cron(0 6 * * ? *)")
       }), {})
     }), {})
-    settings = optional(object({
+    sync_settings = optional(object({
       check_digest = optional(bool, true)
       max_results  = optional(number, 100)
     }), {})
