@@ -2,7 +2,7 @@ locals {
 
   # The equality operators are equal (-eq), greater than (-gt), greater than or equal (-ge), less than (-lt), and less than or equal (-le)
   ecr_repositories = {
-    "images/lambda-ecr-image-sync"             = {}
+    "martijnvdp/lambda-ecr-image-sync"         = {}
     "dev/isovalent/cilium"                     = { source = "quay.io/isovalent/cilium", constraint = "-ge v1.10.3", include_rls = "cee", include_tags = "current" }
     "dev/openpolicyagent/gatekeeper"           = { source = "docker.io/openpolicyagent/gatekeeper", constraint = "-ge v3.9.0" }
     "dev/otel/opentelemetry-collector-contrib" = { source = "docker.io/otel/opentelemetry-collector-contrib", constraint = "-ge 0.66.0" }
@@ -23,7 +23,7 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 module "ecr" {
-  source = "github.com/martijnvdp/terraform-aws-mcaf-ecr?ref=repository-tags"
+  source = "github.com/schubergphilis/terraform-aws-mcaf-ecr?ref=v1.1.0"
 
   image_tag_mutability       = "MUTABLE"
   kms_key_arn                = data.aws_kms_key.cmk.arn
@@ -39,9 +39,9 @@ module "ecrImageSync" {
   //docker_hub_credentials  = var.docker_hub_credentials // optional
   ecr_repository_prefixes = distinct([for repo, tags in local.ecr_repositories : regex("^(\\w+)/.*$", repo)[0] if try(tags.source, "") != ""])
 
-  // source container image: docker pull ghcr.io/martijnvdp/ecr-image-sync:latest
+  // source container image: docker pull ghcr.io/martijnvdp/lambda-ecr-image-sync:v1.0.3
   lambda_function_settings = {
-    container_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/images/ecr-image-sync:v1.0.3"
+    container_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/martijnvdp/ecr-image-sync:v1.0.3"
 
     event_rules = {
 
