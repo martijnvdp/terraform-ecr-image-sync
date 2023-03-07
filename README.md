@@ -4,7 +4,7 @@ Terraform module for AWS to create a lambda for syncing images <br>
 between private aws/ecr and public ecrs like dockerhub/ghcr.io/quay.io
 ## Docker images lambda function
 
-- `lambda-ecr-image-sync:v1.0.3`
+- `docker pull ghcr.io/martijnvdp/lambda-ecr-image-sync:v1.0.3`
 
 see the source repo https://github.com/martijnvdp/lambda-ecr-image-sync
 

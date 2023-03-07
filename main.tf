@@ -3,13 +3,12 @@ locals {
   create_bucket        = var.s3_workflow.create_bucket && var.s3_workflow.enabled
   create_secret        = var.docker_hub_credentials != null
   docker_hub_cred_name = local.create_secret ? "${random_id.aws_sm_item[0].keepers.name}${random_id.aws_sm_item[0].id}" : ""
+  lambda_zip           = try("${path.module}/${[for f in fileset(path.module, "${var.lambda_function_settings.function_zip_file_folder}/*.zip") : f][0]}", "no zip file in dist")
 
   sync_settings = {
     check_digest = var.lambda_function_settings.sync_settings.check_digest
     max_results  = var.lambda_function_settings.sync_settings.max_results
   }
-
-  lambda_zip = try("${path.module}/${[for f in fileset(path.module, "${var.lambda_function_settings.function_zip_file_folder}/*.zip") : f][0]}", "no zip file in dist")
 }
 
 data "aws_caller_identity" "current" {}
@@ -107,7 +106,7 @@ resource "aws_codebuild_project" "ecr_pull_push" {
 
   environment {
     compute_type = "BUILD_GENERAL1_SMALL"
-    image        = "aws/codebuild/standard:5.0"
+    image        = "aws/codebuild/standard:6.0"
     type         = "LINUX_CONTAINER"
 
     environment_variable {
