@@ -49,6 +49,7 @@ locals {
         input_template = <<EOF
         {
           "check_digest": ${local.sync_settings.check_digest},
+          "concurrent": ${local.sync_settings.concurrent},
           "max_results": ${local.sync_settings.max_results},
           "repositories": <resources>
         }

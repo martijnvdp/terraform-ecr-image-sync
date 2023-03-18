@@ -7,6 +7,7 @@ locals {
 
   sync_settings = {
     check_digest = var.lambda_function_settings.sync_settings.check_digest
+    concurrent   = var.lambda_function_settings.sync_settings.concurrent
     max_results  = var.lambda_function_settings.sync_settings.max_results
   }
 }

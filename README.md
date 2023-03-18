@@ -4,7 +4,7 @@ Terraform module for AWS to create a lambda for syncing images <br>
 between private aws/ecr and public ecrs like dockerhub/ghcr.io/quay.io
 ## Docker images lambda function
 
-- `docker pull ghcr.io/martijnvdp/lambda-ecr-image-sync:v1.0.3`
+- `docker pull ghcr.io/martijnvdp/lambda-ecr-image-sync:v1.0.5`
 
 see the source repo https://github.com/martijnvdp/lambda-ecr-image-sync
 
@@ -23,8 +23,8 @@ module "ecrImageSync" {
   ecr_repository_prefixes = distinct([for repo, tags in local.ecr_repositories : regex("^(\\w+)/.*$", repo)[0] if try(tags.source, "") != ""])
 
   // source container image: docker pull ghcr.io/martijnvdp/ecr-image-sync:latest
-  lambda = {
-    container_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/images/ecr-image-sync:v1.0.2"
+  lambda_function_settings = {
+    container_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/images/ecr-image-sync:v1.0.5"
 
     event_rules = {
 
@@ -33,10 +33,10 @@ module "ecrImageSync" {
       }
     }
 
-    settings = {
-      check_digest    = true
-      ecr_repo_prefix = ""
-      max_results     = 5
+    sync_settings = {
+      check_digest    = true // wether or not to compare image digest when same tag is found on ecr and public repo
+      concurrent      = 10 // max concurrent syncs
+      max_results     = 5 // max tag search result
       slack_errors_only = true // only errors to slack
       slack_channel_id  = "" // optional slack channel id
     }
