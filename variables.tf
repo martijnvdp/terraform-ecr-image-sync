@@ -40,6 +40,7 @@ variable "lambda_function_settings" {
     }), {})
     sync_settings = optional(object({
       check_digest = optional(bool, true)
+      concurrent   = optional(number, 5)
       max_results  = optional(number, 100)
     }), {})
   })

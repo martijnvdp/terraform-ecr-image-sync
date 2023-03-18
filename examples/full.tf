@@ -69,7 +69,7 @@ module "ecrImageSync" {
 
   // source container image: docker pull ghcr.io/martijnvdp/lambda-ecr-image-sync:v1.0.3
   lambda_function_settings = {
-    container_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/martijnvdp/lambda-ecr-image-sync:v1.0.3"
+    container_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/martijnvdp/lambda-ecr-image-sync:v1.0.5"
 
     event_rules = {
 
@@ -80,6 +80,7 @@ module "ecrImageSync" {
 
     sync_settings = {
       check_digest = true
+      concurrent   = 10
       max_results  = 5
     }
   }
